@@ -8,6 +8,41 @@ document.addEventListener('DOMContentLoaded', function() {
     const labelTemplate = document.getElementById('labelTemplate');
     const yamlOutput = document.getElementById('yamlOutput');
 
+    function generatePrometheusConfig(groups) {
+        if (!groups || groups.length === 0) {
+            return '[]';
+        }
+
+        const config = groups.map(group => {
+            const configGroup = {
+                targets: []
+            };
+            
+            // Add targets
+            if (group.targets && group.targets.length > 0) {
+                group.targets.forEach(target => {
+                    if (target.trim()) {
+                        configGroup.targets.push(target.trim());
+                    }
+                });
+            }
+            
+            // Add labels if any
+            if (group.labels && Object.keys(group.labels).length > 0) {
+                configGroup.labels = {};
+                Object.entries(group.labels).forEach(([key, value]) => {
+                    if (key.trim() && value.trim()) {
+                        configGroup.labels[key.trim()] = value.trim();
+                    }
+                });
+            }
+            
+            return configGroup;
+        });
+        
+        return JSON.stringify(config, null, 2);
+    }
+
     console.log('Elements found:', {
         groupsDiv: !!groupsDiv,
         groupTemplate: !!groupTemplate,
@@ -171,26 +206,14 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // Use backend API to generate JSON
-        fetch('/generate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(groups)
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                yamlOutput.textContent = data.config;
-            } else {
-                yamlOutput.textContent = `// Error: ${data.error}`;
-            }
-        })
-        .catch(error => {
-            console.error('Error generating JSON:', error);
+        // Generate configuration client-side for static build
+        try {
+            const config = generatePrometheusConfig(groups);
+            yamlOutput.textContent = config;
+        } catch (error) {
+            console.error('Error generating configuration:', error);
             yamlOutput.textContent = `// Error: ${error.message}`;
-        });
+        }
     }
 
     // Add Group button
@@ -214,16 +237,16 @@ document.addEventListener('DOMContentLoaded', function() {
         downloadConfigBtn.addEventListener('click', function(e) {
             console.log('Download button clicked');
             e.preventDefault();
-            const json = yamlOutput.textContent;
-            if (json.startsWith('// Error:') || json.startsWith('// Please add')) {
-                console.log('No valid content to download');
-                return; // Don't download if there's an error or no content
-            }
-            const blob = new Blob([json], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'prometheus-file-sd-config.json';
+                    const config = yamlOutput.textContent;
+        if (config.startsWith('// Error:') || config.startsWith('// Please add') || config === '[]') {
+            console.log('No valid content to download');
+            return; // Don't download if there's an error or no content
+        }
+        const blob = new Blob([config], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'prometheus-file-sd-config.json';
             document.body.appendChild(a);
             a.click();
             setTimeout(() => {
@@ -238,11 +261,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add a default example group on load
     console.log('Adding default example group');
     addGroup({
-        name: 'example',
-        targets: ['youtube.com'],
+        name: 'node-exporter',
+        targets: ['localhost:9100', 'server1:9100'],
         labels: {
-            'instance_name': 'Facebook',
-            'platform': 'facebook'
+            'job': 'node-exporter',
+            'env': 'production'
         }
     });
 }); 
